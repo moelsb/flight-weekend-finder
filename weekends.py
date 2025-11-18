@@ -43,14 +43,15 @@ def generate_weekends(start_date=None):
 # ------------------------------
 # 2. Check region
 # ------------------------------
+EUROPE_CODES = {
+    "AD","AT","BE","BA","BG","HR","CZ","DK","EE","FI","FR",
+    "DE","GR","HU","IE","IT","LV","LI","LT","LU","MT","MD","MC","ME",
+    "NL","MK","NO","PL","PT","RO","RU","SM","RS","SK","SI","ES","SE","CH",
+    "UA","GB","VA"
+}
+
 def is_europe_or_morocco(country_code):
-    if country_code == "MA":
-        return True
-    try:
-        r = requests.get(f"https://restcountries.com/v3.1/alpha/{country_code}").json()
-        return r[0]["region"] == "Europe"
-    except:
-        return False
+    return country_code in EUROPE_CODES or country_code == "MA"
 
 # ------------------------------
 # 3. Search Kiwi API
