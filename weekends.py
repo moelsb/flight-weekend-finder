@@ -4,6 +4,7 @@ import pytz
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import os
 
 EUROPE_PRICE = 50
 WORLD_PRICE = 150
@@ -13,54 +14,49 @@ ORIGINS = ["BCN", "GRO"]
 # ------------------------------
 # 1. Generate weekend list
 # ------------------------------
-
-def generate_weekends():
+def generate_weekends(start_date=None):
     weekends = []
-    today = datetime.date.today()
 
-    # Find next Friday
-    days_until_friday = (4 - today.weekday()) % 7
-    next_friday = today + datetime.timedelta(days=days_until_friday)
+    if start_date is None:
+        today = datetime.date.today()
+        days_until_friday = (4 - today.weekday()) % 7
+        next_friday = today + datetime.timedelta(days=days_until_friday)
+    else:
+        # start_date puede ser string "YYYY-MM-DD" o datetime.date
+        if isinstance(start_date, str):
+            next_friday = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+        else:
+            next_friday = start_date
 
-    # Create 1-year window
-    limit = today + datetime.timedelta(days=365)
+    limit = next_friday + datetime.timedelta(days=365)  # 1 año
 
     while next_friday < limit:
         friday = next_friday
         monday = friday + datetime.timedelta(days=3)
-
         weekends.append((friday, monday))
 
-        # add 14 days (every 15 days)
+        # Siguiente fin de semana cada 14 días
         next_friday = friday + datetime.timedelta(days=14)
 
     return weekends
 
-
 # ------------------------------
-# 2. Check region to apply price cap
+# 2. Check region
 # ------------------------------
-
 def is_europe_or_morocco(country_code):
     if country_code == "MA":
         return True
-
-    url = f"https://restcountries.com/v3.1/alpha/{country_code}"
-    r = requests.get(url).json()
-
     try:
+        r = requests.get(f"https://restcountries.com/v3.1/alpha/{country_code}").json()
         return r[0]["region"] == "Europe"
     except:
         return False
 
-
 # ------------------------------
-# 3. Query Kiwi public API
+# 3. Search Kiwi API
 # ------------------------------
-
 def search_flights(origin, dep_date, ret_date):
     url = "https://api.skypicker.com/flights"
-
     params = {
         "fly_from": origin,
         "fly_to": "anywhere",
@@ -74,43 +70,30 @@ def search_flights(origin, dep_date, ret_date):
         "sort": "price",
         "flight_type": "round"
     }
-
     r = requests.get(url, params=params)
     return r.json().get("data", [])
-
 
 # ------------------------------
 # 4. Filter flights
 # ------------------------------
-
 def filter_flights(flights):
     results = []
-
     for f in flights:
-        duration = f.get("duration", {}).get("total", 0) / 3600  # seconds → hours
+        duration = f.get("duration", {}).get("total", 0) / 3600
         if duration < 1:
             continue
-
         country_code = f.get("countryTo", {}).get("code", "")
-        if is_europe_or_morocco(country_code):
-            price_cap = EUROPE_PRICE
-        else:
-            price_cap = WORLD_PRICE
-
+        price_cap = EUROPE_PRICE if is_europe_or_morocco(country_code) else WORLD_PRICE
         if f["price"] <= price_cap:
             results.append(f)
-
     return results
 
-
 # ------------------------------
-# 5. Build email content
+# 5. Build email
 # ------------------------------
-
 def build_email(results):
     if not results:
         return "No hay ofertas hoy."
-
     lines = []
     for f in results:
         city = f["cityTo"]
@@ -118,7 +101,6 @@ def build_email(results):
         price = f["price"]
         link = f["deep_link"]
         duration = round(f["duration"]["total"] / 3600, 1)
-
         lines.append(
             f"✈️ {city}, {country}\n"
             f"Precio: {price} €\n"
@@ -126,18 +108,15 @@ def build_email(results):
             f"Link: {link}\n"
             f"------------------------\n"
         )
-
     return "\n".join(lines)
-
 
 # ------------------------------
 # 6. Send email
 # ------------------------------
-
 def send_email(text):
-    sender = "YOUR_GMAIL@gmail.com"
-    password = "YOUR_APP_PASSWORD"
-    recipient = "YOUR_GMAIL@gmail.com"
+    sender = os.environ.get("GMAIL_USER")
+    password = os.environ.get("GMAIL_PASSWORD")
+    recipient = os.environ.get("GMAIL_USER")  # mismo correo
 
     msg = MIMEMultipart()
     msg["From"] = sender
@@ -151,16 +130,14 @@ def send_email(text):
     server.send_message(msg)
     server.quit()
 
-
 # ------------------------------
 # 7. Main
 # ------------------------------
-
 def main():
-    weekends = generate_weekends()
+    start_date_env = os.environ.get("START_DATE")  # formato YYYY-MM-DD
+    weekends = generate_weekends(start_date=start_date_env)
 
     all_results = []
-
     for origin in ORIGINS:
         for dep, ret in weekends:
             flights = search_flights(origin, dep, ret)
@@ -169,7 +146,6 @@ def main():
 
     email_text = build_email(all_results)
     send_email(email_text)
-
 
 if __name__ == "__main__":
     main()
