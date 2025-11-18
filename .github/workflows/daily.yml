@@ -20,5 +20,5 @@ jobs:
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
-          START_DATE: "2026-01-23"  # puedes cambiar aquí la fecha inicial
+          START_DATE: "2025-11-18"  # puedes cambiar aquí la fecha inicial
         run: python weekends.py
